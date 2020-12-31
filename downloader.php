@@ -1,18 +1,24 @@
 <?php 
+require 'vendor/autoload.php';
+require 'config.php';
 
 class Downloader
 {
+
 	static $lastDownloaded = 0;
 	static $lastTime = null;
 
 	public static function download($url, $fileName, $date)
 	{
+		ini_set('memory_limit', Config::$memory_limit);	//调整最大占用内存
+		$code = ['"', '*', ':', '<', '>', '？', '/', '\\', '|'];
 		$fileName = preg_replace('# #','',$fileName);
-		if (!is_dir('./videos')) {
-			mkdir('./videos');
+		$fileName = str_replace($code, '', $fileName);
+		if (!is_dir(Config::$path)) {
+			mkdir(Config::$path);
 		}
 
-		$filePath = './videos/'.date('Ymd',strtotime($date)).'_'.$fileName.'.mp4';
+		$filePath = Config::$path.'/'.date('Ymd',strtotime($date)).'_'.$fileName.'.mp4';
 		if (file_exists($filePath)){
 			echo "\033[0;32m"."文件已存在"."\033[0m\n";
 			return;
@@ -25,8 +31,12 @@ class Downloader
 		$ch = curl_init();
 		// 从配置文件中获取根路径
 		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_TIMEOUT,300);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+		if (property_exists('Config', 'proxy')) {
+			curl_setopt($ch, CURLOPT_PROXY, Config::$proxy);
+		}
 		// 开启进度条
 		curl_setopt($ch, CURLOPT_NOPROGRESS, false);
 		// 进度条的触发函数
@@ -36,10 +46,17 @@ class Downloader
 
 		$data = curl_exec($ch);
 		curl_close($ch);
+		
+		if ($data) {
+			$file = fopen($filePath,"w+");
+			fputs($file,$data);//写入文件
+			fclose($file);
+		}
 
-		$file = fopen($filePath,"w+");
-		fputs($file,$data);//写入文件
-		fclose($file);
+		// 使用rclone上传onedrive，其中“91porn:/91porn”对应网盘名称和路径
+		// $command = 'rclone move -P '.$filePath.' 91porn:/91porn';
+		// system($command);
+
 		unset($data);
 	}
 
@@ -73,7 +90,6 @@ class Downloader
 		Downloader::$lastDownloaded = $downloaded;
 		Downloader::$lastTime = microtime(true);
 
-
 		$downloaded = $downloaded/1000000;
 		$downloadSize = $downloadSize/1000000;
 		
@@ -86,4 +102,13 @@ class Downloader
 		$progress = $downloaded/$downloadSize*100;
 		printf("下载进度: %.1f%%, %.2f MB/%.2f MB".$speedStr."\r", $progress, $downloaded, $downloadSize, $speed);
 	}
+}
+
+function random_ip()
+{
+	$a = rand(0, 255);
+	$b = rand(0, 255);
+	$c = rand(0, 255);
+	$d = rand(0, 255);
+	return $a.'.'.$b.'.'.$c.'.'.$d;
 }
